@@ -28,6 +28,20 @@
         loadSprite("pack", "tcg-packs/spacePack.png");
         loadSound("casino", "sounds/casino_ambiance.mp3");
 
+        // the duck sprite sheet: 6 pictures across, 5 rows down (each picture is 64x64)
+        // each row is one animation: "from" and "to" are picture numbers (counting from 0)
+        loadSprite("duck", "ducks/duck_spritesheet.png", {
+          sliceX: 6,
+          sliceY: 5,
+          anims: {
+            idle: { from: 0, to: 5, loop: true, speed: 4 }, // standing still
+            left: { from: 6, to: 11, loop: true, speed: 10 }, // walking left
+            right: { from: 12, to: 17, loop: true, speed: 10 }, // walking right
+            jump: { from: 18, to: 23, speed: 12 }, // hop
+            happy: { from: 24, to: 29, loop: true, speed: 8 }, // celebrate
+          },
+        });
+
 
 
         // PART 1: SHARED GAME STATE (every screen uses these)
@@ -173,17 +187,10 @@
           };
         }
 
-        // the duck, built from a few colored blocks (swap for a PNG later!)
+        // the duck, now a real picture from the sprite sheet
+        // anchor("bot") means x, y is where the duck's FEET are
         function makeDuck (x, y) {
-          const duck = add([pos(x, y), scale(2), z(10)]);
-          duck.add([rect(20, 14), pos(-10, -17), color(255, 255, 255)]); // body
-          duck.add([rect(9, 6), pos(-7, -14), color(215, 215, 235)]); // wing
-          duck.add([rect(12, 12), pos(2, -27), color(255, 255, 255)]); // head
-          duck.add([rect(6, 4), pos(14, -21), color(255, 150, 40)]); // beak
-          duck.add([rect(2, 2), pos(9, -24), color(0, 0, 0)]); // eye
-          duck.add([rect(5, 3), pos(-7, -3), color(255, 150, 40)]); // left foot
-          duck.add([rect(5, 3), pos(2, -3), color(255, 150, 40)]); // right foot
-          return duck;
+          return add([sprite("duck", { anim: "idle" }), pos(x, y), anchor("bot"), scale(1.3), z(10)]);
         }
 
 
@@ -237,16 +244,11 @@
 
         // draw one reel symbol out of colored shapes (centered on x, y)
         function makeSymbol (name, x, y) {
-          const s = add([pos(x, y), scale(name === "duck" ? 3 : 1), z(5)]);
+          const s = add([pos(x, y), z(5)]);
 
           if (name === "duck") {
-            s.add([rect(20, 14), pos(-13, -4), color(255, 255, 255), outline(1, rgb(180, 180, 200))]); // body
-            s.add([rect(9, 6), pos(-10, -1), color(215, 215, 235)]); // wing
-            s.add([rect(12, 12), pos(-1, -14), color(255, 255, 255), outline(1, rgb(180, 180, 200))]); // head
-            s.add([rect(6, 4), pos(11, -8), color(255, 150, 40)]); // beak
-            s.add([rect(2, 2), pos(6, -11), color(0, 0, 0)]); // eye
-            s.add([rect(5, 3), pos(-10, 10), color(255, 150, 40)]); // feet
-            s.add([rect(5, 3), pos(-1, 10), color(255, 150, 40)]);
+            // frame 0 = the standing duck (pos moves it up a bit so it sits in the middle of the reel)
+            s.add([sprite("duck", { frame: 0 }), anchor("center"), pos(0, -16), scale(2.2)]);
           }
 
           if (name === "coin") {
@@ -348,7 +350,17 @@
           const machines = [quackMachine, spaceMachine, slotMachine];
 
           // the duck + the message that pops up when it is next to a machine
-          const duck = makeDuck(450, 495);
+          const duck = makeDuck(450, 505);
+          let facing = "left"; // the sprite sheet duck starts out looking left
+          let currentAnim = "idle";
+
+          // switch animation, but only when it is a NEW one (so it doesn't restart every frame)
+          function setAnim (name) {
+            if (currentAnim === name) return;
+            duck.play(name);
+            currentAnim = name;
+          }
+
           const prompt = add([text("PRESS SPACE", {
             size: 12
           }), anchor("center"), color(255, 214, 102), z(20)]);
@@ -367,10 +379,17 @@
             duck.pos.x = clamp(duck.pos.x + dx * 200 * dt(), 30, 870);
             duck.pos.y = clamp(duck.pos.y + dy * 200 * dt(), 420, 505);
 
-            // face the way we are walking, and waddle a little
-            if (dx !== 0) duck.scale.x = dx > 0 ? 2 : -2;
+            // pick the walking animation (the sheet has a left row and a right row)
+            if (dx < 0) facing = "left";
+            if (dx > 0) facing = "right";
             const moving = dx !== 0 || dy !== 0;
-            duck.scale.y = moving ? 2 + Math.sin(time() * 25) * 0.2 : 2;
+            if (moving) {
+              duck.flipX = false;
+              setAnim(facing); // "left" or "right" animation
+            } else {
+              setAnim("idle");
+              duck.flipX = facing === "right"; // the idle row looks left, so flip it to look right
+            }
 
             // is the duck close to a machine?
             near = null;
